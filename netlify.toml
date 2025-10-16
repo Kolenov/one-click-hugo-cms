@@ -16,6 +16,8 @@
   [build.environment]
     HUGO_VERSION = "0.130.0"
     DART_SASS_VERSION = "1.77.8"
+    # Cache processed images between builds
+    HUGO_RESOURCEDIR = "/opt/build/cache/hugo_cache"
 
 [context.production.environment]
   HUGO_ENV           = "production"
@@ -42,3 +44,7 @@
 
 [context.next.environment]
   HUGO_ENABLEGITINFO = "true"
+
+# Netlify Build Plugin for Hugo caching
+[[plugins]]
+  package = "netlify-plugin-hugo-cache-resources"

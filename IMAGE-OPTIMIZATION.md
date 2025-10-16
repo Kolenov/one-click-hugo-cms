@@ -115,8 +115,66 @@ Check the Actions tab in GitHub to see:
 ✅ **Fast** - Runs in ~2-3 minutes
 ✅ **Free** - Uses GitHub Actions free tier
 
+## Netlify Caching
+
+To prevent re-processing images on every build, the following optimizations are configured:
+
+### 1. **Resource Caching**
+`netlify.toml` includes:
+- `HUGO_RESOURCEDIR` environment variable to persist cache
+- `netlify-plugin-hugo-cache-resources` to cache Hugo resources between builds
+
+
+## Build Time Expectations
+
+| Configuration | Build Time | Image Processing |
+|--------------|------------|------------------|
+| No optimization | 18+ min ❌ | Full processing every build |
+| With GitHub optimization | 10-12 min | Processing optimized images |
+| With Netlify cache | 4-6 min ✅ | Using cached resources |
+
+## Alternative: Full Build in GitHub Actions
+
+If Netlify still times out with webhook, use `.github/workflows/deploy-production.yml`:
+
+1. Add secrets to GitHub repository:
+   - `NETLIFY_AUTH_TOKEN` - Get from Netlify personal tokens
+   - `NETLIFY_SITE_ID` - Get from site settings
+
+2. Disable Netlify auto-builds:
+   - Site Settings → Build & deploy → Stop builds
+
+3. Push to main/master will:
+   - Build in GitHub Actions (6 hour limit)
+   - Deploy to Netlify via CLI
+
+## Decap CMS Compatibility
+
+The solution is fully compatible with Decap CMS (admin interface):
+
+### Image Upload Configuration
+- **Updated CMS config**: Images uploaded through CMS are now saved to `content/posts/{{slug}}/`
+- **Benefits**:
+  - Images are processed by Hugo's image pipeline (WebP, responsive sizes)
+  - Automatic optimization via GitHub Actions
+  - Consistent with existing posts
+
+### Workflow Coverage
+The GitHub Actions workflow optimizes images from:
+- `content/posts/` - Post images (Page Resources)
+- `static/img/` - Legacy images or fallback location
+
+### For Content Editors
+When creating content through Decap CMS:
+1. Upload images normally through the CMS interface
+2. Images are saved to the post's folder automatically
+3. GitHub Actions will optimize them on push
+4. No manual intervention required
+
 ## Notes
 
 - Optimized images are committed back to the repository
 - Commits include `[skip ci]` to avoid triggering builds
 - Original images are overwritten (but preserved in git history)
+- Netlify cache persists between builds (up to 7 days inactive)
+- Decap CMS uploads are automatically optimized

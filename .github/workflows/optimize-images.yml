@@ -8,7 +8,14 @@ on:
       - 'content/posts/**/*.jpeg'
       - 'content/posts/**/*.png'
       - 'content/posts/**/*.gif'
+      - 'static/img/**/*.jpg'
+      - 'static/img/**/*.jpeg'
+      - 'static/img/**/*.png'
+      - 'static/img/**/*.gif'
   workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write  # Only what's needed for git push
 
 jobs:
   optimize:
@@ -28,33 +35,41 @@ jobs:
 
       - name: Optimize images in-place
         run: |
+          set -euo pipefail
+
           echo "🎯 Starting image optimization..."
           echo "Current images size:"
-          du -sh content/posts/
+          du -sh content/posts/ 2>/dev/null || echo "No content/posts directory"
+          du -sh static/img/ 2>/dev/null || echo "No static/img directory"
 
-          # Counter for statistics
-          optimized=0
-          total=0
+          # Use files for counters to avoid subshell issues
+          echo "0" > /tmp/optimized_count
+          echo "0" > /tmp/total_count
+
+          # Process both directories
+          DIRS="content/posts static/img"
 
           # Optimize JPEGs
-          find content/posts -type f \( -name "*.jpg" -o -name "*.jpeg" \) | while read -r img; do
-            total=$((total + 1))
+          while IFS= read -r img; do
+            [ -z "$img" ] && continue
+            echo $(($(cat /tmp/total_count) + 1)) > /tmp/total_count
             original_size=$(stat -c%s "$img")
 
             # Optimize with jpegoptim (quality 80%)
-            jpegoptim --max=80 --strip-all --preserve --quiet "$img"
+            jpegoptim --max=80 --strip-all --preserve --quiet "$img" || true
 
             new_size=$(stat -c%s "$img")
             if [ "$new_size" -lt "$original_size" ]; then
-              optimized=$((optimized + 1))
+              echo $(($(cat /tmp/optimized_count) + 1)) > /tmp/optimized_count
               saved=$((original_size - new_size))
               echo "✅ Optimized: $img (saved $(numfmt --to=iec $saved))"
             fi
-          done
+          done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" \) 2>/dev/null)
 
           # Optimize PNGs
-          find content/posts -type f -name "*.png" | while read -r img; do
-            total=$((total + 1))
+          while IFS= read -r img; do
+            [ -z "$img" ] && continue
+            echo $(($(cat /tmp/total_count) + 1)) > /tmp/total_count
             original_size=$(stat -c%s "$img")
 
             # Try pngquant first (lossy but better compression)
@@ -62,36 +77,40 @@ jobs:
 
             if [ -f "$img.tmp" ]; then
               mv "$img.tmp" "$img"
-              optimized=$((optimized + 1))
+              echo $(($(cat /tmp/optimized_count) + 1)) > /tmp/optimized_count
               new_size=$(stat -c%s "$img")
               saved=$((original_size - new_size))
               echo "✅ Optimized: $img (saved $(numfmt --to=iec $saved))"
             else
               # Fallback to optipng (lossless)
-              optipng -quiet -o2 -preserve "$img"
+              optipng -quiet -o2 -preserve "$img" || true
             fi
-          done
+          done < <(find $DIRS -type f -name "*.png" 2>/dev/null)
 
           # Resize very large images (>2MB or >2000px)
-          find content/posts -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) | while read -r img; do
+          while IFS= read -r img; do
+            [ -z "$img" ] && continue
             # Check file size
             size=$(stat -c%s "$img")
             if [ "$size" -gt 2097152 ]; then  # 2MB in bytes
               echo "📐 Resizing large image: $img ($(numfmt --to=iec $size))"
-              convert "$img" -resize "2000x2000>" -quality 80 "$img"
+              convert "$img" -resize "2000x2000>" -quality 80 "$img" || true
             fi
-          done
+          done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null)
 
           echo ""
           echo "✨ Optimization complete!"
+          echo "Optimized $(cat /tmp/optimized_count) out of $(cat /tmp/total_count) images"
           echo "New images size:"
-          du -sh content/posts/
+          du -sh content/posts/ 2>/dev/null || echo "No content/posts directory"
+          du -sh static/img/ 2>/dev/null || echo "No static/img directory"
 
       - name: Show optimization results
         run: |
-          # Count images
-          jpg_count=$(find content/posts -name "*.jpg" -o -name "*.jpeg" | wc -l)
-          png_count=$(find content/posts -name "*.png" | wc -l)
+          # Count images in both directories
+          DIRS="content/posts static/img"
+          jpg_count=$(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" \) 2>/dev/null | wc -l)
+          png_count=$(find $DIRS -type f -name "*.png" 2>/dev/null | wc -l)
 
           echo "📊 Image Statistics:"
           echo "- JPEG images: $jpg_count"
@@ -101,16 +120,19 @@ jobs:
           # Show largest images
           echo ""
           echo "🏆 Largest images after optimization:"
-          find content/posts -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) -exec ls -lh {} \; | sort -k5 -rh | head -10
+          find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null -exec ls -lh {} \; | sort -k5 -rh | head -10
 
       - name: Commit optimized images
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          # Check if there are changes
-          if [ -n "$(git status --porcelain content/posts/)" ]; then
-            git add content/posts/**/*.{jpg,jpeg,png,gif} || true
+          # Check if there are changes in either directory
+          if [ -n "$(git status --porcelain content/posts/ static/img/ 2>/dev/null)" ]; then
+            # Add all image files from both directories
+            git add content/posts/ static/img/ 2>/dev/null || true
+            git reset -- '*.md' 2>/dev/null || true  # Don't add markdown files
+
             git commit -m "🖼️ Optimize images for faster builds
 
             Automated image optimization:
