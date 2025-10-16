@@ -1,0 +1,127 @@
+name: Optimize Images
+
+# Run when images are added/modified
+on:
+  push:
+    paths:
+      - 'content/posts/**/*.jpg'
+      - 'content/posts/**/*.jpeg'
+      - 'content/posts/**/*.png'
+      - 'content/posts/**/*.gif'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install optimization tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick webp jpegoptim optipng pngquant
+
+      - name: Optimize images in-place
+        run: |
+          echo "🎯 Starting image optimization..."
+          echo "Current images size:"
+          du -sh content/posts/
+
+          # Counter for statistics
+          optimized=0
+          total=0
+
+          # Optimize JPEGs
+          find content/posts -type f \( -name "*.jpg" -o -name "*.jpeg" \) | while read -r img; do
+            total=$((total + 1))
+            original_size=$(stat -c%s "$img")
+
+            # Optimize with jpegoptim (quality 80%)
+            jpegoptim --max=80 --strip-all --preserve --quiet "$img"
+
+            new_size=$(stat -c%s "$img")
+            if [ "$new_size" -lt "$original_size" ]; then
+              optimized=$((optimized + 1))
+              saved=$((original_size - new_size))
+              echo "✅ Optimized: $img (saved $(numfmt --to=iec $saved))"
+            fi
+          done
+
+          # Optimize PNGs
+          find content/posts -type f -name "*.png" | while read -r img; do
+            total=$((total + 1))
+            original_size=$(stat -c%s "$img")
+
+            # Try pngquant first (lossy but better compression)
+            pngquant --quality=80-95 --skip-if-larger --strip --force --output "$img.tmp" "$img" 2>/dev/null
+
+            if [ -f "$img.tmp" ]; then
+              mv "$img.tmp" "$img"
+              optimized=$((optimized + 1))
+              new_size=$(stat -c%s "$img")
+              saved=$((original_size - new_size))
+              echo "✅ Optimized: $img (saved $(numfmt --to=iec $saved))"
+            else
+              # Fallback to optipng (lossless)
+              optipng -quiet -o2 -preserve "$img"
+            fi
+          done
+
+          # Resize very large images (>2MB or >2000px)
+          find content/posts -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) | while read -r img; do
+            # Check file size
+            size=$(stat -c%s "$img")
+            if [ "$size" -gt 2097152 ]; then  # 2MB in bytes
+              echo "📐 Resizing large image: $img ($(numfmt --to=iec $size))"
+              convert "$img" -resize "2000x2000>" -quality 80 "$img"
+            fi
+          done
+
+          echo ""
+          echo "✨ Optimization complete!"
+          echo "New images size:"
+          du -sh content/posts/
+
+      - name: Show optimization results
+        run: |
+          # Count images
+          jpg_count=$(find content/posts -name "*.jpg" -o -name "*.jpeg" | wc -l)
+          png_count=$(find content/posts -name "*.png" | wc -l)
+
+          echo "📊 Image Statistics:"
+          echo "- JPEG images: $jpg_count"
+          echo "- PNG images: $png_count"
+          echo "- Total images: $((jpg_count + png_count))"
+
+          # Show largest images
+          echo ""
+          echo "🏆 Largest images after optimization:"
+          find content/posts -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) -exec ls -lh {} \; | sort -k5 -rh | head -10
+
+      - name: Commit optimized images
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Check if there are changes
+          if [ -n "$(git status --porcelain content/posts/)" ]; then
+            git add content/posts/**/*.{jpg,jpeg,png,gif} || true
+            git commit -m "🖼️ Optimize images for faster builds
+
+            Automated image optimization:
+            - Reduced JPEG quality to 80%
+            - Optimized PNG compression
+            - Resized images larger than 2000px
+
+            [skip ci]"
+
+            git push
+            echo "✅ Changes committed and pushed!"
+          else
+            echo "ℹ️ No changes to commit - images are already optimized"
+          fi
