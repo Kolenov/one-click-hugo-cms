@@ -146,8 +146,8 @@ jobs:
             [skip ci]"
 
             git push
-            git rebase origin/main
-            git push origin main
+            git rebase main
+            git push main
             echo "✅ Changes committed and pushed!"
           else
             echo "ℹ️ No changes to commit - images are already optimized"
