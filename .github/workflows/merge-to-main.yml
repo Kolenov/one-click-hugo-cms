@@ -48,8 +48,7 @@ jobs:
             Changes include:
             - Content updates from DecapCMS
             - Optimized images
-            - Any other content-related changes" \
-              --label "auto-merge"
+            - Any other content-related changes"
 
             # Get the new PR number and enable auto-merge
             NEW_PR_NUMBER=$(gh pr list --base main --head content-management --json number --jq '.[0].number')

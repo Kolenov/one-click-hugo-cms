@@ -8,6 +8,7 @@ on:
     types:
       - opened
       - synchronize
+      - labeled
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -21,7 +22,8 @@ jobs:
     if: |
       github.event.pull_request.draft == false &&
       contains(github.event.pull_request.labels.*.name, 'decap-cms/pending_publish') &&
-      !contains(github.event.pull_request.labels.*.name, 'decap-cms/draft')
+      !contains(github.event.pull_request.labels.*.name, 'decap-cms/draft') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'decap-cms/pending_publish')
 
     steps:
       - name: Checkout PR branch
