@@ -32,11 +32,12 @@ jobs:
 
           if [ -n "$PR_NUMBER" ]; then
             echo "📝 PR #$PR_NUMBER already exists"
-            # Enable auto-merge if not already enabled
-            gh pr merge "$PR_NUMBER" --auto --squash || echo "Auto-merge already enabled or PR not ready"
+            # Merge PR directly
+            gh pr merge "$PR_NUMBER" --squash
+            echo "✅ PR #$PR_NUMBER merged!"
           else
             echo "🆕 Creating new PR content-management → main"
-            # Create new PR with auto-merge
+            # Create new PR and merge immediately
             gh pr create \
               --base main \
               --head content-management \
@@ -50,16 +51,16 @@ jobs:
             - Optimized images
             - Any other content-related changes"
 
-            # Get the new PR number and enable auto-merge
+            # Get the new PR number and merge immediately
             NEW_PR_NUMBER=$(gh pr list --base main --head content-management --json number --jq '.[0].number')
             if [ -n "$NEW_PR_NUMBER" ]; then
-              gh pr merge "$NEW_PR_NUMBER" --auto --squash
-              echo "✅ Auto-merge enabled for PR #$NEW_PR_NUMBER"
+              gh pr merge "$NEW_PR_NUMBER" --squash
+              echo "✅ PR #$NEW_PR_NUMBER merged!"
             fi
           fi
 
       - name: Summary
         run: |
           echo "✨ Workflow complete!"
-          echo "The PR will be automatically merged when all checks pass."
-          echo "After merge to main, Netlify will automatically start the build."
+          echo "PR merged to main."
+          echo "Netlify will automatically start the build."
