@@ -1,17 +1,15 @@
 name: Optimize Images
 
-# Run when images are added/modified
+# Run when images are added/modified in PRs to content-management
 on:
-  push:
-    paths:
-      - 'content/posts/**/*.jpg'
-      - 'content/posts/**/*.jpeg'
-      - 'content/posts/**/*.png'
-      - 'content/posts/**/*.gif'
-      - 'static/img/**/*.jpg'
-      - 'static/img/**/*.jpeg'
-      - 'static/img/**/*.png'
-      - 'static/img/**/*.gif'
+  pull_request:
+    branches:
+      - content-management
+    types:
+      - opened
+      - synchronize
+      - labeled
+      - ready_for_review
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -21,12 +19,18 @@ jobs:
   optimize:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only run for ready-to-publish PRs (not drafts)
+    if: |
+      github.event.pull_request.draft == false &&
+      contains(github.event.pull_request.labels.*.name, 'decap-cms/pending_publish') &&
+      !contains(github.event.pull_request.labels.*.name, 'decap-cms/draft')
 
     steps:
-      - name: Checkout repository
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: content-management
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install optimization tools
@@ -146,9 +150,15 @@ jobs:
             [skip ci]"
 
             git push
-            git rebase origin/main
-            git push origin main
             echo "✅ Changes committed and pushed!"
           else
             echo "ℹ️ No changes to commit - images are already optimized"
           fi
+
+      - name: Enable auto-merge for Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Enable auto-merge with squash strategy
+          gh pr merge ${{ github.event.pull_request.number }} --auto --squash
+          echo "✅ Auto-merge enabled for PR #${{ github.event.pull_request.number }}"
