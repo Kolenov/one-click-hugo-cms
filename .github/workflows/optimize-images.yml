@@ -73,7 +73,9 @@ jobs:
             original_size=$(stat -c%s "$img")
 
             # Try pngquant first (lossy but better compression)
-            pngquant --quality=80-95 --skip-if-larger --strip --force --output "$img.tmp" "$img" 2>/dev/null
+            # pngquant exits with code 98 when the result would be larger; under set -e that would fail the job.
+            # Make it non-fatal and decide based on the existence of the tmp file.
+            pngquant --quality=80-95 --skip-if-larger --strip --force --output "$img.tmp" "$img" 2>/dev/null || true
 
             if [ -f "$img.tmp" ]; then
               mv "$img.tmp" "$img"
