@@ -26,6 +26,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: content-management
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install optimization tools
@@ -145,6 +146,8 @@ jobs:
             [skip ci]"
 
             git push
+            git rebase origin/main
+            git push origin main
             echo "✅ Changes committed and pushed!"
           else
             echo "ℹ️ No changes to commit - images are already optimized"
