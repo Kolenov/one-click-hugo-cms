@@ -2,8 +2,7 @@ taxonomyList:
   - categories
   - industries
 deviceSizes:
-  - 400   # Mobile devices
+  - 470   # Mobile devices
   - 768   # Tablets (CSS breakpoint)
   - 1200  # Desktop content width
-  - 1920  # Full HD screens
 indexing: true

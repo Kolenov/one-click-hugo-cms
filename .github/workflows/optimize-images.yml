@@ -94,16 +94,28 @@ jobs:
             fi
           done < <(find $DIRS -type f -name "*.png" 2>/dev/null)
 
-          # Resize very large images (>2MB or >2000px)
+          # Resize all images to max 1200px width
+          echo ""
+          echo "📐 Resizing images to max 1200px..."
+          echo "0" > /tmp/resized_count
+
           while IFS= read -r img; do
             [ -z "$img" ] && continue
-            # Check file size
-            size=$(stat -c%s "$img")
-            if [ "$size" -gt 2097152 ]; then  # 2MB in bytes
-              echo "📐 Resizing large image: $img ($(numfmt --to=iec $size))"
-              convert "$img" -resize "2000x2000>" -quality 80 "$img" || true
+            # Get image width
+            width=$(identify -format "%w" "$img" 2>/dev/null || echo "0")
+            [ "$width" = "0" ] && continue
+
+            if [ "$width" -gt 1200 ]; then
+              original_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
+              convert "$img" -resize "1200x>" -quality 80 "$img" || true
+              new_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
+              saved=$((original_size - new_size))
+              echo "✅ Resized: $img (${width}px → max 1200px, saved $(numfmt --to=iec $saved 2>/dev/null || echo "${saved} bytes"))"
+              echo $(($(cat /tmp/resized_count) + 1)) > /tmp/resized_count
             fi
           done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null)
+
+          echo "Resized $(cat /tmp/resized_count) images to max 1200px"
 
           echo ""
           echo "✨ Optimization complete!"
@@ -140,12 +152,14 @@ jobs:
             git add content/posts/ static/img/ 2>/dev/null || true
             git reset -- '*.md' 2>/dev/null || true  # Don't add markdown files
 
-            git commit -m "🖼️ Optimize images for faster builds
+            git commit -m "🖼️ Optimize and resize images for faster builds
 
             Automated image optimization:
             - Reduced JPEG quality to 80%
             - Optimized PNG compression
-            - Resized images larger than 2000px
+            - Resized all images to max 1200px width
+
+            This reduces file sizes and speeds up Hugo build on Netlify.
 
             [skip ci]"
 
