@@ -2,16 +2,7 @@ name: Optimize Images
 
 # Run when images are added/modified
 on:
-  push:
-    paths:
-      - 'content/posts/**/*.jpg'
-      - 'content/posts/**/*.jpeg'
-      - 'content/posts/**/*.png'
-      - 'content/posts/**/*.gif'
-      - 'static/img/**/*.jpg'
-      - 'static/img/**/*.jpeg'
-      - 'static/img/**/*.png'
-      - 'static/img/**/*.gif'
+  pull_request:
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -146,9 +137,21 @@ jobs:
             [skip ci]"
 
             git push
-            git rebase main
-            git push main
             echo "✅ Changes committed and pushed!"
           else
             echo "ℹ️ No changes to commit - images are already optimized"
           fi
+
+      - name: Auto Merge Pull Request
+        uses: pascalgn/automerge-action@v0.16.0 # Or another suitable auto-merge action
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Configuration for the auto-merge action (e.g., merge strategy, required status checks)
+          merge_method: squash # or merge, rebase
+          # required_statuses: 'build, test' # Example of required status checks
+
+      - name: Merge into Main
+        run: |
+          git rebase origin/main
+          git push origin main
