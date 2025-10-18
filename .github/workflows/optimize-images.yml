@@ -34,7 +34,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libvips-tools
 
-      - name: Resize images to max 1200px
+      - name: Resize images to fit within 1200x1200px
         run: |
           set -euo pipefail
 
@@ -49,29 +49,31 @@ jobs:
           # Process both directories
           DIRS="content/posts static/img"
 
-          # Resize all images to max 1200px width (using libvips for 4-8x speedup)
-          echo "📐 Resizing images to max 1200px with libvips..."
+          # Resize all images to fit within 1200x1200px (using libvips for 4-8x speedup)
+          echo "📐 Resizing images to fit within 1200x1200px with libvips..."
           while IFS= read -r img; do
             [ -z "$img" ] && continue
-            # Get image width using vips
+            # Get image dimensions using vips
             width=$(vips im_header_int width "$img" 2>/dev/null || echo "0")
-            [ "$width" = "0" ] && continue
+            height=$(vips im_header_int height "$img" 2>/dev/null || echo "0")
+            [ "$width" = "0" ] || [ "$height" = "0" ] && continue
 
-            if [ "$width" -gt 1200 ]; then
+            # Check if either dimension is greater than 1200
+            if [ "$width" -gt 1200 ] || [ "$height" -gt 1200 ]; then
               original_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
-              # Resize with libvips (4-8x faster than ImageMagick, uses shrink-on-load for JPEG)
-              # %s in output pattern is replaced with input filename
-              vipsthumbnail "$img" --size 1200x -o "%s" || true
+              # Resize to fit within 1200x1200 box, preserving aspect ratio
+              # --size 1200x1200> means "shrink only if larger, keeping aspect ratio"
+              vipsthumbnail "$img" --size 1200x1200\> -o "%s" || true
               new_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
               saved=$((original_size - new_size))
-              echo "✅ Resized: $img (${width}px → max 1200px, saved $(numfmt --to=iec $saved 2>/dev/null || echo "${saved} bytes"))"
+              echo "✅ Resized: $img (${width}x${height}px → max 1200x1200px, saved $(numfmt --to=iec $saved 2>/dev/null || echo "${saved} bytes"))"
               echo $(($(cat /tmp/resized_count) + 1)) > /tmp/resized_count
             fi
           done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null)
 
           echo ""
           echo "✨ Resize complete!"
-          echo "- Resized: $(cat /tmp/resized_count) images to max 1200px"
+          echo "- Resized: $(cat /tmp/resized_count) images to fit within 1200x1200px"
           echo ""
           echo "New images size:"
           du -sh content/posts/ 2>/dev/null || echo "No content/posts directory"
@@ -105,7 +107,7 @@ jobs:
             git add content/posts/ static/img/ 2>/dev/null || true
             git reset -- '*.md' 2>/dev/null || true  # Don't add markdown files
 
-            git commit -m "🖼️ Resize images to max 1200px for faster builds
+            git commit -m "🖼️ Resize images to fit within 1200x1200px for faster builds
 
             Automated image resize to reduce file sizes and speed up Hugo build on Netlify.
 
