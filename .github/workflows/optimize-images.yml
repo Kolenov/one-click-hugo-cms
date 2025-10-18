@@ -36,7 +36,7 @@ jobs:
       - name: Install optimization tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y imagemagick webp jpegoptim optipng pngquant
+          sudo apt-get install -y libvips-tools jpegoptim optipng pngquant
 
       - name: Optimize images in-place
         run: |
@@ -50,11 +50,35 @@ jobs:
           # Use files for counters to avoid subshell issues
           echo "0" > /tmp/optimized_count
           echo "0" > /tmp/total_count
+          echo "0" > /tmp/resized_count
 
           # Process both directories
           DIRS="content/posts static/img"
 
-          # Optimize JPEGs
+          # STEP 1: Resize all images to max 1200px width FIRST (using libvips for 4-8x speedup)
+          echo "📐 Step 1: Resizing images to max 1200px with libvips..."
+          while IFS= read -r img; do
+            [ -z "$img" ] && continue
+            # Get image width using vips
+            width=$(vips im_header_int width "$img" 2>/dev/null || echo "0")
+            [ "$width" = "0" ] && continue
+
+            if [ "$width" -gt 1200 ]; then
+              original_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
+              # Resize with libvips (4-8x faster than ImageMagick, uses shrink-on-load for JPEG)
+              # %s in output pattern is replaced with input filename
+              vipsthumbnail "$img" --size 1200x -o "%s" || true
+              new_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
+              saved=$((original_size - new_size))
+              echo "✅ Resized: $img (${width}px → max 1200px, saved $(numfmt --to=iec $saved 2>/dev/null || echo "${saved} bytes"))"
+              echo $(($(cat /tmp/resized_count) + 1)) > /tmp/resized_count
+            fi
+          done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null)
+          echo "Resized $(cat /tmp/resized_count) images"
+
+          # STEP 2: Optimize JPEGs quality
+          echo ""
+          echo "🎨 Step 2: Optimizing JPEG quality..."
           while IFS= read -r img; do
             [ -z "$img" ] && continue
             echo $(($(cat /tmp/total_count) + 1)) > /tmp/total_count
@@ -71,7 +95,9 @@ jobs:
             fi
           done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" \) 2>/dev/null)
 
-          # Optimize PNGs
+          # STEP 3: Optimize PNGs quality
+          echo ""
+          echo "🎨 Step 3: Optimizing PNG quality..."
           while IFS= read -r img; do
             [ -z "$img" ] && continue
             echo $(($(cat /tmp/total_count) + 1)) > /tmp/total_count
@@ -94,32 +120,11 @@ jobs:
             fi
           done < <(find $DIRS -type f -name "*.png" 2>/dev/null)
 
-          # Resize all images to max 1200px width
-          echo ""
-          echo "📐 Resizing images to max 1200px..."
-          echo "0" > /tmp/resized_count
-
-          while IFS= read -r img; do
-            [ -z "$img" ] && continue
-            # Get image width
-            width=$(identify -format "%w" "$img" 2>/dev/null || echo "0")
-            [ "$width" = "0" ] && continue
-
-            if [ "$width" -gt 1200 ]; then
-              original_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
-              convert "$img" -resize "1200x>" -quality 80 "$img" || true
-              new_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
-              saved=$((original_size - new_size))
-              echo "✅ Resized: $img (${width}px → max 1200px, saved $(numfmt --to=iec $saved 2>/dev/null || echo "${saved} bytes"))"
-              echo $(($(cat /tmp/resized_count) + 1)) > /tmp/resized_count
-            fi
-          done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null)
-
-          echo "Resized $(cat /tmp/resized_count) images to max 1200px"
-
           echo ""
           echo "✨ Optimization complete!"
-          echo "Optimized $(cat /tmp/optimized_count) out of $(cat /tmp/total_count) images"
+          echo "- Resized: $(cat /tmp/resized_count) images to max 1200px"
+          echo "- Optimized quality: $(cat /tmp/optimized_count) out of $(cat /tmp/total_count) images"
+          echo ""
           echo "New images size:"
           du -sh content/posts/ 2>/dev/null || echo "No content/posts directory"
           du -sh static/img/ 2>/dev/null || echo "No static/img directory"
