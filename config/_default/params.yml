@@ -2,7 +2,8 @@ taxonomyList:
   - categories
   - industries
 deviceSizes:
-  - 470   # Mobile devices
-  - 768   # Tablets (CSS breakpoint)
-  - 1200  # Desktop content width
+  - 640   # Mobile Retina (360-430px × 2)
+  - 828   # Large Mobile/Small Tablet (414px × 2)
+  - 1280  # Tablet/Laptop
+  - 1920  # Desktop Full HD
 indexing: true
