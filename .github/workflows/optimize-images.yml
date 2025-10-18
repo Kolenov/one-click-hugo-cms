@@ -56,7 +56,8 @@ jobs:
             # Get image dimensions using vips
             width=$(vips im_header_int width "$img" 2>/dev/null || echo "0")
             height=$(vips im_header_int height "$img" 2>/dev/null || echo "0")
-            [ "$width" = "0" ] || [ "$height" = "0" ] && continue
+            [ "$width" = "0" ] && continue
+            [ "$height" = "0" ] && continue
 
             # Check if either dimension is greater than 1200
             if [ "$width" -gt 1200 ] || [ "$height" -gt 1200 ]; then
