@@ -1,14 +1,17 @@
 name: Optimize Images
 
-# Run when images are added/modified in PRs to content-management
+# Run when images are published (merged) to main via DecapCMS
 on:
-  pull_request:
+  push:
     branches:
-      - content-management
-    types:
-      - opened
-      - synchronize
-      - labeled
+      - main
+    paths:
+      - 'content/posts/**/*.jpg'
+      - 'content/posts/**/*.jpeg'
+      - 'content/posts/**/*.png'
+      - 'static/img/**/*.jpg'
+      - 'static/img/**/*.jpeg'
+      - 'static/img/**/*.png'
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -18,45 +21,36 @@ jobs:
   optimize:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Only run for ready-to-publish PRs (not drafts)
-    if: |
-      github.event.pull_request.draft == false &&
-      contains(github.event.pull_request.labels.*.name, 'decap-cms/pending_publish') &&
-      !contains(github.event.pull_request.labels.*.name, 'decap-cms/draft') &&
-      (github.event.action != 'labeled' || github.event.label.name == 'decap-cms/pending_publish')
 
     steps:
-      - name: Checkout PR branch
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install optimization tools
+      - name: Install libvips
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvips-tools jpegoptim optipng pngquant
+          sudo apt-get install -y libvips-tools
 
-      - name: Optimize images in-place
+      - name: Resize images to max 1200px
         run: |
           set -euo pipefail
 
-          echo "🎯 Starting image optimization..."
+          echo "🎯 Starting image resize..."
           echo "Current images size:"
           du -sh content/posts/ 2>/dev/null || echo "No content/posts directory"
           du -sh static/img/ 2>/dev/null || echo "No static/img directory"
 
           # Use files for counters to avoid subshell issues
-          echo "0" > /tmp/optimized_count
-          echo "0" > /tmp/total_count
           echo "0" > /tmp/resized_count
 
           # Process both directories
           DIRS="content/posts static/img"
 
-          # STEP 1: Resize all images to max 1200px width FIRST (using libvips for 4-8x speedup)
-          echo "📐 Step 1: Resizing images to max 1200px with libvips..."
+          # Resize all images to max 1200px width (using libvips for 4-8x speedup)
+          echo "📐 Resizing images to max 1200px with libvips..."
           while IFS= read -r img; do
             [ -z "$img" ] && continue
             # Get image width using vips
@@ -74,62 +68,16 @@ jobs:
               echo $(($(cat /tmp/resized_count) + 1)) > /tmp/resized_count
             fi
           done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null)
-          echo "Resized $(cat /tmp/resized_count) images"
-
-          # STEP 2: Optimize JPEGs quality
-          echo ""
-          echo "🎨 Step 2: Optimizing JPEG quality..."
-          while IFS= read -r img; do
-            [ -z "$img" ] && continue
-            echo $(($(cat /tmp/total_count) + 1)) > /tmp/total_count
-            original_size=$(stat -c%s "$img")
-
-            # Optimize with jpegoptim (quality 80%)
-            jpegoptim --max=80 --strip-all --preserve --quiet "$img" || true
-
-            new_size=$(stat -c%s "$img")
-            if [ "$new_size" -lt "$original_size" ]; then
-              echo $(($(cat /tmp/optimized_count) + 1)) > /tmp/optimized_count
-              saved=$((original_size - new_size))
-              echo "✅ Optimized: $img (saved $(numfmt --to=iec $saved))"
-            fi
-          done < <(find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" \) 2>/dev/null)
-
-          # STEP 3: Optimize PNGs quality
-          echo ""
-          echo "🎨 Step 3: Optimizing PNG quality..."
-          while IFS= read -r img; do
-            [ -z "$img" ] && continue
-            echo $(($(cat /tmp/total_count) + 1)) > /tmp/total_count
-            original_size=$(stat -c%s "$img")
-
-            # Try pngquant first (lossy but better compression)
-            # pngquant exits with code 98 when the result would be larger; under set -e that would fail the job.
-            # Make it non-fatal and decide based on the existence of the tmp file.
-            pngquant --quality=80-95 --skip-if-larger --strip --force --output "$img.tmp" "$img" 2>/dev/null || true
-
-            if [ -f "$img.tmp" ]; then
-              mv "$img.tmp" "$img"
-              echo $(($(cat /tmp/optimized_count) + 1)) > /tmp/optimized_count
-              new_size=$(stat -c%s "$img")
-              saved=$((original_size - new_size))
-              echo "✅ Optimized: $img (saved $(numfmt --to=iec $saved))"
-            else
-              # Fallback to optipng (lossless)
-              optipng -quiet -o2 -preserve "$img" || true
-            fi
-          done < <(find $DIRS -type f -name "*.png" 2>/dev/null)
 
           echo ""
-          echo "✨ Optimization complete!"
+          echo "✨ Resize complete!"
           echo "- Resized: $(cat /tmp/resized_count) images to max 1200px"
-          echo "- Optimized quality: $(cat /tmp/optimized_count) out of $(cat /tmp/total_count) images"
           echo ""
           echo "New images size:"
           du -sh content/posts/ 2>/dev/null || echo "No content/posts directory"
           du -sh static/img/ 2>/dev/null || echo "No static/img directory"
 
-      - name: Show optimization results
+      - name: Show resize results
         run: |
           # Count images in both directories
           DIRS="content/posts static/img"
@@ -143,10 +91,10 @@ jobs:
 
           # Show largest images
           echo ""
-          echo "🏆 Largest images after optimization:"
+          echo "🏆 Largest images after resize:"
           find $DIRS -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null -exec ls -lh {} \; | sort -k5 -rh | head -10
 
-      - name: Commit optimized images
+      - name: Commit resized images
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -157,27 +105,14 @@ jobs:
             git add content/posts/ static/img/ 2>/dev/null || true
             git reset -- '*.md' 2>/dev/null || true  # Don't add markdown files
 
-            git commit -m "🖼️ Optimize and resize images for faster builds
+            git commit -m "🖼️ Resize images to max 1200px for faster builds
 
-            Automated image optimization:
-            - Reduced JPEG quality to 80%
-            - Optimized PNG compression
-            - Resized all images to max 1200px width
-
-            This reduces file sizes and speeds up Hugo build on Netlify.
+            Automated image resize to reduce file sizes and speed up Hugo build on Netlify.
 
             [skip ci]"
 
             git push
             echo "✅ Changes committed and pushed!"
           else
-            echo "ℹ️ No changes to commit - images are already optimized"
+            echo "ℹ️ No changes to commit - images are already resized"
           fi
-
-      - name: Enable auto-merge for Pull Request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Enable auto-merge with squash strategy
-          gh pr merge ${{ github.event.pull_request.number }} --auto --squash
-          echo "✅ Auto-merge enabled for PR #${{ github.event.pull_request.number }}"
