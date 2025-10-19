@@ -67,9 +67,18 @@ jobs:
             # Check if either dimension is greater than 1920
             if [ "$width" -gt 1920 ] || [ "$height" -gt 1920 ]; then
               original_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
-              # Resize to fit within 1920x1920 box, preserving aspect ratio
+
+              # Get file extension and create temp file
+              ext="${img##*.}"
+              temp_file="/tmp/vips_$(basename "$img")"
+
+              # Resize to temp file with proper format (preserving aspect ratio)
               # --size 1920x1920> means "shrink only if larger, keeping aspect ratio"
-              vipsthumbnail "$img" --size 1920x1920\> -o "%s" || true
+              vipsthumbnail "$img" --size 1920x1920\> -o "$temp_file"
+
+              # Replace original with resized version (in-place)
+              mv "$temp_file" "$img"
+
               new_size=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null)
               saved=$((original_size - new_size))
               echo "✅ Resized: $img (${width}x${height}px → max 1920x1920px, saved $(numfmt --to=iec $saved 2>/dev/null || echo "${saved} bytes"))"
