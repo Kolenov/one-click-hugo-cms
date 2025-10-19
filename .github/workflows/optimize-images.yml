@@ -33,10 +33,25 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache libvips
+        id: cache-libvips
+        uses: actions/cache@v4
+        with:
+          path: ~/libvips
+          key: libvips-8.15.1-linux
+
       - name: Install libvips
+        if: steps.cache-libvips.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libvips-tools
+          cd ~
+          wget https://github.com/libvips/libvips/releases/download/v8.15.1/vips-8.15.1-linux-x64.tar.xz
+          tar xf vips-8.15.1-linux-x64.tar.xz
+          mv vips-8.15.1 libvips
+
+      - name: Add libvips to PATH
+        run: |
+          echo "$HOME/libvips/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=$HOME/libvips/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Resize images to fit within 1920x1920px
         run: |
