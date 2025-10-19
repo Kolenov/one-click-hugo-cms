@@ -8,6 +8,6 @@ promote:
   promote: false
 top: false
 ---
-
-
 ![](pexels-pixabay-326055.jpg)
+
+![](blank-smartphone-screen-with-design-space.jpg)
