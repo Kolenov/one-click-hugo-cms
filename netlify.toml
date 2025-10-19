@@ -4,6 +4,8 @@
 
 [build]
   publish = "public"
+  # Skip build if commit has images but author is not github-actions (wait for optimization)
+  ignore = "bash netlify-build-decision.sh"
   command = """\
   curl -LJO https://github.com/sass/dart-sass/releases/download/${DART_SASS_VERSION}/dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz && \
   tar -xf dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz && \

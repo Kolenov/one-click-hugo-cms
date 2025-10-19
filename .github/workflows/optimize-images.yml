@@ -1,14 +1,10 @@
 name: Optimize Images
 
-# Run when content is ready to publish via DecapCMS editorial workflow
+# Run when content is published (merged) to main via DecapCMS
 on:
-  pull_request:
+  push:
     branches:
       - main
-    types:
-      - opened
-      - synchronize
-      - labeled
     paths:
       - 'content/posts/**/*.jpg'
       - 'content/posts/**/*.jpeg'
@@ -20,23 +16,20 @@ on:
 
 permissions:
   contents: write  # Only what's needed for git push
-  pull-requests: read  # Read PR labels
 
 jobs:
   optimize:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Only run for ready-to-publish PRs (not drafts)
+    # Skip if this is our own commit (prevent infinite loop)
     if: |
-      github.event.pull_request.draft == false &&
-      contains(github.event.pull_request.labels.*.name, 'decap-cms/pending_publish') &&
-      !contains(github.event.pull_request.labels.*.name, 'decap-cms/draft')
+      github.event_name == 'workflow_dispatch' ||
+      !contains(github.event.head_commit.message, '🖼️ Resize images')
 
     steps:
-      - name: Checkout PR branch
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
