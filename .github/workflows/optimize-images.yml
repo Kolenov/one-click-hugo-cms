@@ -33,10 +33,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install libvips
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libvips-tools
+      - name: Install libvips with caching
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libvips-tools
+          version: 1.0
 
       - name: Resize images to fit within 1920x1920px
         run: |
