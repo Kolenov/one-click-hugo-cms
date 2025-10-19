@@ -28,10 +28,16 @@ This script runs before every Netlify build and decides whether to continue or s
 
 ```bash
 # Logic:
-# 1. Commit has images + author ≠ github-actions → SKIP (wait for optimization)
-# 2. Commit has images + author = github-actions → DEPLOY (optimized!)
-# 3. Commit has NO images → DEPLOY (developer fixes)
+# 1. If author = github-actions → DEPLOY (images processed or already optimal)
+# 2. If commit has images + author ≠ github-actions → SKIP (wait for optimization)
+# 3. If commit has NO images → DEPLOY (developer fixes)
 ```
+
+**Key Feature:** GitHub Actions ALWAYS creates a commit:
+- If images were resized → commit with optimized images
+- If no resize needed → empty commit with message "✅ All images already optimal size"
+
+This ensures Netlify always receives a second commit to deploy, even when images are already optimal.
 
 **Configuration in `netlify.toml`:**
 ```toml
@@ -53,6 +59,7 @@ The workflow is fully automated and requires no manual intervention.
 
 ### DecapCMS Publish Flow
 
+**Scenario A: Images need optimization (> 1920px)**
 ```
 Content Manager clicks "Publish" in DecapCMS
   ↓
@@ -64,13 +71,36 @@ Netlify: netlify-build-decision.sh runs
   → Detects: commit has images + author ≠ github-actions
   → Decision: SKIP BUILD ⏭️
   ↓ (30-60 seconds)
-GitHub Actions: Optimizes images, commits to main (commit by github-actions[bot])
+GitHub Actions: Resizes images, commits to main
+  → Commit message: "🖼️ Resize images to fit within 1920x1920px..."
   ↓ (immediately)
 Netlify: netlify-build-decision.sh runs
-  → Detects: commit has images + author = github-actions
+  → Detects: author = github-actions
   → Decision: CONTINUE BUILD ✅
   ↓
 Netlify deploys site with optimized images 🚀
+```
+
+**Scenario B: Images already optimal (≤ 1920px)**
+```
+Content Manager clicks "Publish" in DecapCMS
+  ↓
+DecapCMS merges PR to main (commit by content manager)
+  ↓ (immediately)
+GitHub Actions: "Optimize Images" workflow starts
+  ↓
+Netlify: netlify-build-decision.sh runs
+  → Detects: commit has images + author ≠ github-actions
+  → Decision: SKIP BUILD ⏭️
+  ↓ (30-60 seconds)
+GitHub Actions: No resize needed, creates empty commit
+  → Commit message: "✅ All images already optimal size..."
+  ↓ (immediately)
+Netlify: netlify-build-decision.sh runs
+  → Detects: author = github-actions
+  → Decision: CONTINUE BUILD ✅
+  ↓
+Netlify deploys site (images were already good) 🚀
 ```
 
 ### Developer Direct Commit Flow
@@ -188,8 +218,10 @@ Netlify configuration with build decision logic:
 GitHub Actions workflow that:
 1. Triggers on push to `main` with image changes
 2. Skips if commit is its own (prevents infinite loop)
-3. Optimizes images using libvips
-4. Commits back to `main`
+3. Resizes images > 1920px using libvips
+4. **ALWAYS creates a commit:**
+   - If images resized → commit with optimized images
+   - If no resize needed → empty commit (ensures Netlify deploys)
 
 ---
 

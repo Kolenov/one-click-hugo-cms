@@ -117,7 +117,13 @@ jobs:
             Automated image resize to reduce file sizes and speed up Hugo build on Netlify."
 
             git push
-            echo "✅ Changes committed and pushed to PR branch!"
+            echo "✅ Changes committed and pushed!"
           else
-            echo "ℹ️ No changes to commit - images are already resized"
+            # No changes needed, but create empty commit to trigger Netlify deploy
+            git commit --allow-empty -m "✅ All images already optimal size (≤1920x1920px)
+
+            No resize needed. Images are already within optimal dimensions for web performance."
+
+            git push
+            echo "✅ Empty commit created - images already optimal!"
           fi

@@ -199,7 +199,9 @@ Access local CMS at http://localhost:1313/blog/admin/
    - Preserves aspect ratio
    - Shrink only (no upscaling)
    - In-place replacement
-6. Commit changes as github-actions[bot]
+6. **ALWAYS create commit:**
+   - If resized → commit with optimized images
+   - If no resize needed → empty commit (ensures Netlify deploys)
 7. Push to `main`
 
 ### Netlify Build Filtering
@@ -209,9 +211,11 @@ Access local CMS at http://localhost:1313/blog/admin/
 **Purpose:** Ensure Netlify deploys only optimized images
 
 **Logic:**
-- Commit has images + author ≠ github-actions → **SKIP BUILD** (wait for optimization)
-- Commit has images + author = github-actions → **DEPLOY** (optimized!)
-- Commit has NO images → **DEPLOY** (developer fixes)
+- If author = github-actions → **DEPLOY** (images processed or already optimal)
+- If commit has images + author ≠ github-actions → **SKIP BUILD** (wait for optimization)
+- If commit has NO images → **DEPLOY** (developer fixes)
+
+**Important:** GitHub Actions always creates a commit to trigger Netlify deploy, preventing content from getting stuck when images are already optimal.
 
 **Configuration:** `netlify.toml` includes `ignore = "bash netlify-build-decision.sh"`
 

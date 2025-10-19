@@ -209,12 +209,15 @@ deviceSizes:
 **Process:**
 1. Content manager clicks "Publish" in DecapCMS
 2. DecapCMS merges PR to `main` (with unoptimized images)
-3. GitHub Actions workflow runs on push to `main`
-4. Check image dimensions using libvips
-5. Resize if width OR height > 1920px
-6. Preserve aspect ratio, shrink only (no upscaling)
-7. Commit optimized images back to `main`
-8. Netlify deploys only the optimized version (skips first commit)
+3. Netlify skips first deploy (waiting for optimization)
+4. GitHub Actions workflow runs on push to `main`
+5. Check image dimensions using libvips
+6. Resize if width OR height > 1920px
+7. Preserve aspect ratio, shrink only (no upscaling)
+8. **ALWAYS create commit:**
+   - If resized → commit with optimized images
+   - If no resize needed → empty commit to trigger deploy
+9. Netlify deploys the second commit (optimized or verified-optimal)
 
 **Technology:** libvips (4-8x faster than ImageMagick)
 
@@ -229,9 +232,14 @@ vipsthumbnail "$img" --size 1920x1920\> -o "%s"
 **Purpose:** Prevent Netlify from deploying unoptimized images
 
 **Logic:**
+- If author = github-actions → **DEPLOY** (images processed or already optimal)
 - If commit has images AND author ≠ github-actions → **SKIP** (wait for optimization)
-- If commit has images AND author = github-actions → **DEPLOY** (optimized!)
 - If commit has NO images → **DEPLOY** (developer fixes)
+
+**Important:** GitHub Actions always creates a commit, even if no images need resizing. This ensures:
+- Content with already-optimal images gets deployed
+- Netlify never gets "stuck" waiting for optimization that won't happen
+- Two-commit pattern works reliably in all scenarios
 
 **Configuration Required:**
 - `netlify-build-decision.sh` must be executable (`chmod +x`)
