@@ -1,10 +1,14 @@
 name: Optimize Images
 
-# Run when images are published (merged) to main via DecapCMS
+# Run when content is ready to publish via DecapCMS editorial workflow
 on:
-  push:
+  pull_request:
     branches:
       - main
+    types:
+      - opened
+      - synchronize
+      - labeled
     paths:
       - 'content/posts/**/*.jpg'
       - 'content/posts/**/*.jpeg'
@@ -16,16 +20,23 @@ on:
 
 permissions:
   contents: write  # Only what's needed for git push
+  pull-requests: read  # Read PR labels
 
 jobs:
   optimize:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only run for ready-to-publish PRs (not drafts)
+    if: |
+      github.event.pull_request.draft == false &&
+      contains(github.event.pull_request.labels.*.name, 'decap-cms/pending_publish') &&
+      !contains(github.event.pull_request.labels.*.name, 'decap-cms/draft')
 
     steps:
-      - name: Checkout main branch
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -110,12 +121,10 @@ jobs:
 
             git commit -m "🖼️ Resize images to fit within 1920x1920px for faster builds
 
-            Automated image resize to reduce file sizes and speed up Hugo build on Netlify.
-
-            [skip ci]"
+            Automated image resize to reduce file sizes and speed up Hugo build on Netlify."
 
             git push
-            echo "✅ Changes committed and pushed!"
+            echo "✅ Changes committed and pushed to PR branch!"
           else
             echo "ℹ️ No changes to commit - images are already resized"
           fi
